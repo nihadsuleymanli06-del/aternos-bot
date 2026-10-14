@@ -1,12 +1,30 @@
 import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import discord
-from discord import app_commands
 from pyaternos import AternosAccount
 
+# Render-in "Timed Out" verməməsi üçün mini veb-server
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot aktivdir!")
+
+def run_web_server():
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# Veb serveri arxa planda (thread) işə salırıq
+threading.Thread(target=run_web_server, daemon=True).start()
+
+# Discord Bot Hissəsi
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
-tree = app_commands.CommandTree(client)
+tree = discord.app_commands.CommandTree(client)
 
 ATERNOS_USER = os.getenv("ATERNOS_USERNAME")
 ATERNOS_PASS = os.getenv("ATERNOS_PASSWORD")
@@ -26,7 +44,6 @@ class AternosView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            # Aternos hesabına qoşuluruq
             account = AternosAccount(ATERNOS_USER, ATERNOS_PASS)
             servers = account.servers
             
@@ -34,8 +51,8 @@ class AternosView(discord.ui.View):
                 await interaction.followup.send("❌ Hesabınızda heç bir server tapılmadı!", ephemeral=True)
                 return
                 
-            server = servers[0] # İlk serveri seçirik
-            server.start() # Serveri işə salırıq
+            server = servers[0]
+            server.start()
             
             await interaction.followup.send("✅ **Uğurlu!** Aternos serveriniz işə salındı.", ephemeral=True)
         except Exception as e:
